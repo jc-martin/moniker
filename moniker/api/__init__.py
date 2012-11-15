@@ -28,6 +28,11 @@ cfg.CONF.register_opts([
     cfg.StrOpt('auth_strategy', default='noauth',
                help='The strategy to use for auth. Supports noauth or '
                     'keystone'),
+    cfg.StrOpt('core_plugin', default='moniker.plugins.sample.SamplePlugin.FakePlugin',
+        help='Plugin'),
+    cfg.StrOpt('allow_bulk', default=True,
+        help='Plugin supports bulk'),
+
 ])
 
 
