@@ -10,6 +10,7 @@ import netaddr
 import re
 
 from moniker.openstack.common import exception as m_exc
+from moniker.openstack.common.gettextutils import _
 
 
 LOG = logging.getLogger(__name__)
@@ -164,14 +165,12 @@ RESOURCE_ATTRIBUTE_MAP = {
                'is_visible': True},
         'name': {'allow_post': True, 'allow_put': False,
                  'is_visible': True},
-        'email': {'allow_post': False, 'allow_put': True,
+        'email': {'allow_post': True, 'allow_put': True,
                     'default': '', 'is_visible': True},
         'ttl': {'allow_post': True, 'allow_put': True,
                 'default': 60,
                 'validate': {'type:range': [0,6000]},
                 'is_visible': True},
-        'serial': {'allow_post': True, 'allow_put': True,
-                   'is_visible': True},
         'tenant_id': {'allow_post': True, 'allow_put': False,
                       'required_by_policy': True,
                       'is_visible': True}

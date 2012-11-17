@@ -10,6 +10,7 @@ from moniker.api.v2 import attributes
 from moniker.api.v2 import resource as wsgi_resource
 from moniker.openstack.common import exception
 from moniker.openstack.common import cfg
+from moniker.openstack.common.gettextutils import _
 from moniker.openstack.common.notifier import api as notifier_api
 
 LOG = logging.getLogger(__name__)
@@ -196,59 +197,6 @@ class Controller(object):
             self._resource, self._attr_info,
             allow_bulk=self._allow_bulk)
         action = "create_%s" % self._resource
-        # Check authz
-        try:
-            if self._collection in body:
-                # Have to account for bulk create
-                for item in body[self._collection]:
-                    self._validate_network_tenant_ownership(
-                        request,
-                        item[self._resource],
-                    )
-                    policy.enforce(request.context,
-                        action,
-                        item[self._resource],
-                        plugin=self._plugin)
-                    try:
-                        count = QUOTAS.count(request.context, self._resource,
-                            self._plugin, self._collection,
-                            item[self._resource]['tenant_id'])
-                        kwargs = {self._resource: count + 1}
-                    except exceptions.QuotaResourceUnknown as e:
-                        # We don't want to quota this resource
-                        LOG.debug(e)
-                    except Exception:
-                        raise
-                    else:
-                        QUOTAS.limit_check(request.context,
-                            item[self._resource]['tenant_id'],
-                            **kwargs)
-            else:
-                self._validate_network_tenant_ownership(
-                    request,
-                    body[self._resource]
-                )
-                policy.enforce(request.context,
-                    action,
-                    body[self._resource],
-                    plugin=self._plugin)
-                try:
-                    count = QUOTAS.count(request.context, self._resource,
-                        self._plugin, self._collection,
-                        body[self._resource]['tenant_id'])
-                    kwargs = {self._resource: count + 1}
-                except exceptions.QuotaResourceUnknown as e:
-                    # We don't want to quota this resource
-                    LOG.debug(e)
-                except Exception:
-                    raise
-                else:
-                    QUOTAS.limit_check(request.context,
-                        body[self._resource]['tenant_id'],
-                        **kwargs)
-        except exceptions.PolicyNotAuthorized:
-            LOG.exception("Create operation not authorized")
-            raise webob.exc.HTTPForbidden()
 
         def notify(create_result):
             notifier_api.notify(request.context,
@@ -284,17 +232,6 @@ class Controller(object):
             {self._resource + '_id': id})
         action = "delete_%s" % self._resource
 
-        # Check authz
-        obj = self._item(request, id)
-        try:
-            policy.enforce(request.context,
-                action,
-                obj,
-                plugin=self._plugin)
-        except exceptions.PolicyNotAuthorized:
-            # To avoid giving away information, pretend that it
-            # doesn't exist
-            raise webob.exc.HTTPNotFound()
 
         obj_deleter = getattr(self._plugin, action)
         obj_deleter(request.context, id)
@@ -350,19 +287,20 @@ class Controller(object):
     @staticmethod
     def _populate_tenant_id(context, res_dict, is_create):
 
+        LOG.debug("res_dict: %s", res_dict)
         if (('tenant_id' in res_dict and
-             res_dict['tenant_id'] != context.tenant_id and
+             res_dict['tenant_id'] != context.tenant and
              not context.is_admin)):
-            msg = _("Specifying 'tenant_id' other than authenticated "
+            msg = _("Specifying 'tenant' other than authenticated "
                     "tenant in request requires admin privileges")
             raise webob.exc.HTTPBadRequest(msg)
 
         if is_create and 'tenant_id' not in res_dict:
-            if context.tenant_id:
-                res_dict['tenant_id'] = context.tenant_id
+            if context.tenant:
+                res_dict['tenant_id'] = context.tenant
             else:
                 msg = _("Running without keystyone AuthN requires "
-                        " that tenant_id is specified")
+                        " that tenant is specified")
                 raise webob.exc.HTTPBadRequest(msg)
 
     @staticmethod
@@ -447,29 +385,6 @@ class Controller(object):
                             "Reason: %(reason)s.") % msg_dict
                     raise webob.exc.HTTPBadRequest(msg)
         return body
-
-    def _validate_network_tenant_ownership(self, request, resource_item):
-        # TODO(salvatore-orlando): consider whether this check can be folded
-        # in the policy engine
-        if self._resource not in ('port', 'subnet'):
-            return
-        network = self._plugin.get_network(
-            request.context,
-            resource_item['network_id'])
-        # do not perform the check on shared networks
-        if network.get('shared'):
-            return
-
-        network_owner = network['tenant_id']
-
-        if network_owner != resource_item['tenant_id']:
-            msg = _("Tenant %(tenant_id)s not allowed to "
-                    "create %(resource)s on this network")
-            raise webob.exc.HTTPForbidden(msg % {
-                "tenant_id": resource_item['tenant_id'],
-                "resource": self._resource,
-                })
-
 
 def create_resource(collection, resource, plugin, params, allow_bulk=False,
                     member_actions=None):

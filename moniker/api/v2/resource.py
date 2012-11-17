@@ -13,6 +13,7 @@ from moniker.openstack.common import exception
 from moniker.openstack.common import context
 from moniker.openstack.common import jsonutils as json
 from moniker.openstack.common import wsgi
+from moniker.openstack.common.gettextutils import _
 
 
 LOG = logging.getLogger(__name__)
